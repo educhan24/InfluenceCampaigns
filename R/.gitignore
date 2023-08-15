@@ -38,3 +38,4 @@ RMI_Analytics.Rproj
 allData.R
 .secrets
 .httr-oauth-salesforcer
+.env
