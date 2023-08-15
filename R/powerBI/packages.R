@@ -13,6 +13,7 @@ library(salesforcer)
 library(rvest)
 library(conflicted)
 library(stringr)
+library(dotenv)
 
 conflicts_prefer(jsonlite::toJSON)
 conflicts_prefer(jsonlite::fromJSON)
