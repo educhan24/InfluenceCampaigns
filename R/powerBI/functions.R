@@ -5,6 +5,7 @@
 
 ## function that 1. binds the Campaign ID to all final dataframes and 2. pushes the data to a google sheet
 ## if data already exists in sheet, df is bound to existing data and pushed
+
 pushData <- function(df, sheetName){
   
   # bind campaign ID
@@ -14,25 +15,25 @@ pushData <- function(df, sheetName){
   
   tryCatch({ 
     
-    existingData <- read_sheet(ss = ss, sheet = sheetName) %>% 
+    existingData <- read.xlsx(file = ss, sheet = sheetName) %>% 
       rbind(df)
     
-    ## if development mode is on, overwrite data in sheet
     if(mode == 'development'){
-      write_sheet(df, ss = ss, sheet = sheetName) 
+      write.xlsx(df, file = ss, sheetName = sheetName, overwrite = T) 
       return(df)
     } else {
-      write_sheet(existingData, ss = ss, sheet = sheetName) 
+      write.xlsx(existingData, file = ss, sheetName = sheetName, overwrite = F) 
       return(existingData)
     }
     
-    ## catch error when the sheet does not already exist
+    
   }, error = function(e) { 
-    write_sheet(df, ss = ss, sheet = sheetName) 
+    write.xlsx(df, file = ss, sheetName = sheetName) 
     return(df) 
   })
   
 }
+
 
 #### GOOGLE ANALYTICS ####
 
@@ -1153,5 +1154,6 @@ getMondayCall <- function(x) {
   )
   return(jsonlite::fromJSON(content(request, as = "text", encoding = "UTF-8")))
 }
+
 
 
