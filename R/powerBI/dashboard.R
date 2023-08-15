@@ -1,8 +1,10 @@
 
+setwd('C:\\Users\\ghoffman\\OneDrive - RMI\\01. Projects\\Python_General\\RMI_Analytics\\R\\powerBI')
 ### get packages and functions
-source("/Users/sara/Desktop/GitHub/RMI_Analytics/R/powerBI/packages.R")  
-source("/Users/sara/Desktop/GitHub/RMI_Analytics/R/powerBI/functions.R")  
+source("packages.R")  
+source("functions.R")  
 
+load_dot_env('Renviron.env')
 ### SET CAMPAIGN
 
 # current options are 1. OCI 2. Coal v Gas
@@ -31,13 +33,14 @@ header5 <- c("Authorization" = pardotTokenV5, "Pardot-Business-Unit-Id" = pardot
 # gs4_auth(cache = ".secrets", email = "sazhu24@amherst.edu")
 
 ## GA Authentication
-ga_auth(email = "sara.zhu@rmi.org")
+ga_auth(email = "ghoffman@rmi.org")
 
 ## SF Authentication
 sf_auth()
 
 ## set google sheet
-ss <- 'https://docs.google.com/spreadsheets/d/1FtZQKYp4ESsY5yQzKuvGT5TorKSyMdvRo4bxg6TI7DU/edit?usp=sharing'
+ss <- 'OCI+ Dashboard Dataset.xlsx'
+#  'https://docs.google.com/spreadsheets/d/1FtZQKYp4ESsY5yQzKuvGT5TorKSyMdvRo4bxg6TI7DU/edit?usp=sharing'
 
 ## set mode
 # standard mode binds data to existing rows
@@ -45,8 +48,9 @@ ss <- 'https://docs.google.com/spreadsheets/d/1FtZQKYp4ESsY5yQzKuvGT5TorKSyMdvRo
 mode <- 'development'
 
 ### READ CAMPAIGN KEY
-campaignKey <- read_sheet('https://docs.google.com/spreadsheets/d/1YyF4N2C9En55bqzisSi8TwUMzsvMnEc0jgFYdbBt3O0/edit?usp=sharing', 
-                          sheet = paste0('Campaign Key - ', campaign))
+campaignKey <- read.xlsx('Campaign Key.xlsx', sheet = paste0('Campaign Key - ', campaign))
+
+
 
 campaignID <- as.character(campaignKey[1, c('campaignID')])
 campaignPages <- campaignKey[, c('propertyID', 'page')]
@@ -57,8 +61,8 @@ propertyIDs <- propertyIDs[!is.na(propertyIDs)]
 campaignReports <- campaignKey[!is.na(campaignKey$reportID), 'reportID']
 campaignEvents <- campaignKey[!is.na(campaignKey$eventID), 'eventID']
 
-if(nrow(campaignReports) == 0) hasReport <- FALSE else hasReport <- TRUE
-if(nrow(campaignEvents) == 0) hasEvent <- FALSE else hasEvent <- TRUE
+if(length(campaignReports) == 0) hasReport <- FALSE else hasReport <- TRUE
+if(length(campaignEvents) == 0) hasEvent <- FALSE else hasEvent <- TRUE
 
 socialTag <- as.character(campaignKey[1, c('socialTag')])
 
@@ -72,8 +76,8 @@ metadataGA4 <- ga_meta(version = "data", rmiPropertyID)
 dateRangeGA <- c("2023-01-01", paste(currentDate))
 
 ### get referral sites
-referralSites <- read.xlsx('/Users/sara/Desktop/GitHub/RMI_Analytics/audiences/referralSites.xlsx') 
-  
+referralSites <- read.xlsx('Referral Site Categories.xlsx', sheet = 'All Referral Sites')
+
 ###
 campaignPages <- campaignPages %>% 
   mutate(site = ifelse(propertyID == rmiPropertyID, 'rmi.org', sub('/(.*)', '', sub('(.*)https://', '', page)))) %>% 
@@ -178,10 +182,10 @@ if(length(propertyIDs) > 1){
 
 ## push google analytics data
 
-ALL_WEB_TRAFFIC <- pushData(allTraffic, 'Web Traffic - All')
-ALL_WEB_SOCIAL <- pushData(socialTraffic, 'Web Traffic - Social')
-ALL_WEB_GEO <- pushData(geographyTraffic, 'Web Traffic - Geography')
-ALL_WEB_REFERRALS <- pushData(mediaReferrals, 'Web Traffic - Referrals')
+ALL_WEB_TRAFFIC <- pushData(allTraffic, sheetName = 'Web Traffic - All')
+ALL_WEB_SOCIAL <- pushData(socialTraffic, sheetName = 'Web Traffic - Social')
+ALL_WEB_GEO <- pushData(geographyTraffic, sheetName = 'Web Traffic - Geography')
+ALL_WEB_REFERRALS <- pushData(mediaReferrals, sheetName = 'Web Traffic - Referrals')
 
 
 ##### EMAIL NEWSLETTERS 
@@ -221,10 +225,10 @@ if(hasReport == TRUE | hasEvent == TRUE | hasEmail == TRUE){
     filter(!grepl('unknown|not provided|contacts created by revenue grid', Account))
   
   ## get domain info for gov accounts
-  govDomains <- read.xlsx('/Users/sara/Desktop/GitHub/RMI_Analytics/audiences/govDomains.xlsx') 
+  govDomains <- read.xlsx('audiences/govDomains.xlsx') 
   
   ## get audience domains and accounts
-  audienceGroups <- read.xlsx('/Users/sara/Desktop/GitHub/RMI_Analytics/audiences/audienceGroups.xlsx')
+  audienceGroups <- read.xlsx('audiences/audienceGroups.xlsx')
   audienceAccounts <- audienceGroups %>% select(Account, type) %>% filter(!is.na(Account)) %>% distinct(Account, .keep_all = TRUE)
   audienceDomains <- audienceGroups %>% select(Domain, type) %>% filter(!is.na(Domain)) %>% distinct(Domain, .keep_all = TRUE)
 }
@@ -371,5 +375,4 @@ contentSummary <- socialContent %>%
   rbind(mediaContent)
 
 ALL_CONTENT_SUMMARY <- pushData(contentSummary, 'Content Summary')
-
 
