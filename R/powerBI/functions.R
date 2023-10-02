@@ -19,7 +19,7 @@ pushData <- function(df, sheetName){
     
     #' if development mode is on, overwrite data in sheet
     if(mode == 'development'){
-      write.xlsx(df, file = ss, sheetName = sheetName, overwrite = T) 
+      write.xlsx(df, file = ss, sheetName = sheetName, overwrite = T, append = T) 
       return(df)
     } else {
       write.xlsx(existingData, file = ss, sheetName = sheetName, overwrite = F) 
@@ -348,7 +348,8 @@ getBatchClicks <- function(emailId, df){
                           add_headers(.headers = header4))
       getClicks <- jsonlite::fromJSON(content(email_clicks, as = "text", encoding = "UTF-8"))
       clicksQuery <- getClicks[["result"]][["emailClick"]]
-      
+    
+
       digit <- sub('(.*) ', '', str_match(clicksQuery[200, 'created_at'], " *(.*?)\\s*(:)")[,2])
       if(grepl('^0', digit)){ hour <- '%2' } else { hour <- '%20' }
       nextDate <- gsub(' ', hour, clicksQuery[200, 'created_at'])
@@ -381,7 +382,7 @@ getProspectClicks <- function(df){
     clicks <- getBatchClicks(i, df)
     clicksTotal <- clicksTotal %>% rbind(clicks)
   }
-  
+ 
   return(clicksTotal)
 }
 
@@ -612,16 +613,14 @@ cleanCampaignDF <- function(df){
         #' define donor type
         case_when(
            !is.na(Giving_Circle) ~ Giving_Circle,
-           !is.na(Last_Gift) ~ 'Donor',
-           .default = NA
+           !is.na(Last_Gift) ~ 'Donor'
            ),
       #' define icon for Power BI
       Icon = 
         case_when(
            EngagementType == 'Report Download' ~ 1,
            EngagementType == 'Event' ~ 2, 
-           EngagementType == 'Newsletter' ~ 3, 
-           .default = NA
+           EngagementType == 'Newsletter' ~ 3 
            ),
       #' get Pardot ID from Pardot URL
       Pardot_ID = sub("(.*)=", "", Pardot_URL)) %>% 
@@ -644,7 +643,7 @@ cleanCampaignDF <- function(df){
           grepl('Household', Account) | Account == 'RMI' ~ 'Household',
           #' use account name matches from govDomains file if account name is unknown
           Account == 'Unknown' & !is.na(govName) ~ govName,
-          .default = Account
+          TRUE ~ Account
         ),
       #' create audience grouping to categorize accounts that fall under Government, NGO, Multilaterals, 
       #' Financial Entities, Utilities/Power Generators, Other Corporate, Academic, or Foundation
@@ -653,8 +652,7 @@ cleanCampaignDF <- function(df){
           level == 'FEDERAL' ~ 'National Gov.',
           level == 'STATE'|grepl('state of|commonwealth of', tolower(Account)) ~ 'State Gov.',
           level == 'LOCAL'|level == 'COUNTY'|grepl('city of|county of', tolower(Account)) ~ 'Local Gov.',
-          level == 'INTERNATIONAL' ~ 'International Gov.',
-          .default = NA
+          level == 'INTERNATIONAL' ~ 'International Gov.'
         )) %>% 
     left_join(select(audienceAccounts, c(Account, type)), by = c('Account')) %>%
     mutate(Audience1 = ifelse(!is.na(type) & is.na(Audience1), type, Audience1)) %>% 
@@ -668,7 +666,7 @@ cleanCampaignDF <- function(df){
           grepl('Foundation', AccountType) & is.na(Audience1)  ~ 'Foundation',
           (grepl('Academic', AccountType)) & (Account != '' | is.na(Account) | Account != 'Unknown') ~ 'Academic',
           Account == 'Unknown'|is.na(Audience1) ~ 'N/A',
-          .default = Audience1
+          TRUE ~ Audience1
         ),
       Audience2 = ifelse(grepl('Gov', Audience1), 'Government', Audience1)
     ) %>% 
@@ -915,6 +913,7 @@ sproutPostRequest <- function(page, dateRange, profileIDs, tagged = TRUE){
     internal <- getStats[["data"]][["internal"]]
     postStats <- getStats[["data"]] %>% 
       select(-c('metrics', 'internal')) %>% 
+     # select(-c('metrics')) %>% 
       cbind(metrics) %>% 
       cbind(internal)
   } else if(tagged == FALSE) {
@@ -1092,9 +1091,9 @@ getLIProgramPosts <- function(type){
   LI_CFAN <- cleanPostDF(getPosts('(5381251)', type = type), type = type, linkedin = 'CFAN')
   LI_CCAF <- cleanPostDF(getPosts('(5403265)', type = type), type = type, linkedin = 'CCAF')
   LI_BUILD <- cleanPostDF(getPosts('(5541628)', type = type), type = type, linkedin = 'Buildings')
-  LI_TRANSPORT <- cleanPostDF(getPosts('(5635317)', type = type), type = type, linkedin = 'Transportation')
+ # LI_TRANSPORT <- cleanPostDF(getPosts('(5635317)', type = type), type = type, linkedin = 'Transportation')
   
-  LI_PROGRAM <- LI_CFAN %>% rbind(LI_CCAF) %>% rbind(LI_BUILD) %>% rbind(LI_TRANSPORT)
+  LI_PROGRAM <- LI_CFAN %>% rbind(LI_CCAF) %>% rbind(LI_BUILD)# %>% rbind(LI_TRANSPORT)
   return(LI_PROGRAM)
 }
 

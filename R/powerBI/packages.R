@@ -14,6 +14,8 @@ library(rvest)
 library(conflicted)
 library(stringr)
 library(dotenv)
+library(writexl)
+library(RMySQL)
 
 conflicts_prefer(jsonlite::toJSON)
 conflicts_prefer(jsonlite::fromJSON)
@@ -22,3 +24,4 @@ conflicts_prefer(dplyr::mutate)
 conflicts_prefer(dplyr::group_by)
 conflicts_prefer(dplyr::summarize)
 conflicts_prefer(dplyr::rename)
+
