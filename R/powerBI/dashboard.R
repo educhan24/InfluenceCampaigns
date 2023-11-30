@@ -21,19 +21,19 @@ con <- dbConnect(
         ssl.ca = normalizePath("C:\\Users\\ghoffman\\OneDrive - RMI\\01. Projects\\DigiCertGlobalRootCA.crt.pem")
       )
 
-a <- dbListTables(con)
-
-b <- as.character("allTraffic" , "campaignNewsletters" ,"campaignPosts"  ,  "contentSummary" ,   "donations", 
-          "geographyTraffic"  ,  "mediaReferrals"  ,    "SFcampaigns"   ,      "socialTraffic"    ,   "targetCampaign")
-
-
-readxl::excel_sheets('OCI+ Dashboard Dataset.xlsx')
-
-for(i in readxl::excel_sheets('OCI+ Dashboard Dataset.xlsx')){
-  df <- read.xlsx('OCI+ Dashboard Dataset.xlsx', sheet = i, detectDates = TRUE)
-  dbWriteTable(con, i, df, append = TRUE)
-
-}
+# a <- dbListTables(con)
+# 
+# b <- as.character("allTraffic" , "campaignNewsletters" ,"campaignPosts"  ,  "contentSummary" ,   "donations", 
+#           "geographyTraffic"  ,  "mediaReferrals"  ,    "SFcampaigns"   ,      "socialTraffic"    ,   "targetCampaign")
+# 
+# 
+# readxl::excel_sheets('OCI+ Dashboard Dataset.xlsx')
+# 
+# for(i in readxl::excel_sheets('OCI+ Dashboard Dataset.xlsx')){
+#   df <- read.xlsx('OCI+ Dashboard Dataset.xlsx', sheet = i, detectDates = TRUE)
+#   dbWriteTable(con, i, df, append = TRUE)
+# 
+# }
 
 
 ### SET CAMPAIGN
@@ -80,8 +80,9 @@ mode <- 'development'
 #' 1. OCI 
 #' 2. Coal v Gas
 
-campaigns <- c('OCI', 'Coal v Gas')
-campaign <- campaigns[2]
+campaigns <- c('OCI', 'Coal v Gas', "COP28")
+campaign <- campaigns[1]
+campaignID <- campaign
 
 ### READ CAMPAIGN KEY
 campaignKey <- read.xlsx('Campaign Key.xlsx', sheet = paste0('Campaign Key - ', campaign))
@@ -128,6 +129,37 @@ message('GETTING GOOGLE ANALYTICS DATA')
 rmiPropertyID <- 354053620
 metadataGA4 <- ga_meta(version = "data", rmiPropertyID)
 dateRangeGA <- c("2023-01-01", paste(currentDate))
+
+
+##########################################################333
+###############################################################3
+
+
+
+
+
+# pages <- ga_data(
+#   rmiPropertyID,
+#   metrics = c('screenPageViews', "totalUsers", "userEngagementDuration"),
+#   dimensions = c("pageTitle", "date"),
+#   date_range = dateRangeGA,
+#   limit = -1)
+# 
+# 
+# 
+
+
+
+
+
+
+
+
+
+###################################################333
+########################################################33
+
+
 
 ### get referral sites
 referralSites <- read.xlsx('Referral Site Categories.xlsx', sheet = 'All Referral Sites')
@@ -283,12 +315,12 @@ campaignNewsletters <- getCampaignEmails(pageURLs)
 #' Set hasEmail to FALSE if no emails detected
 if(nrow(campaignNewsletters) == 0) hasEmail <- FALSE else hasEmail <- TRUE
 
-if(hasEmail == TRUE){
+#if(hasEmail == TRUE){
   #' push data
  # message('PUSHING NEWSLETTER DATA')
   
  # ALL_NEWSLETTERS <- pushData(campaignNewsletters, 'Newsletters')
-}
+#}
 
 
 
@@ -464,6 +496,12 @@ message('GETTING MONDAY.COM DATA')
 #' 3. Retrieve ID, audiences, and promotion tactics from these projects
 #' 4. Filter for project that contains campaign ID
 #' 5. Write data set
+#' 
+
+# query <- "query { boards (ids: 3987200449) { items { id name column_values{ id value text } } } } "
+# res <- getMondayCall(query)
+# check <- as.data.frame(res[["data"]][["boards"]][["items"]][[1]])
+
 
 #' get Active Projects Board
 query <- "query { boards (ids: 2208962537) { items { id name column_values{ id value text } } } } "
@@ -476,10 +514,10 @@ projects <- data.frame(id = '', row = '', name = '')[0,]
 for(i in 1:nrow(activeProjects)){
   
   board <- activeProjects[[3]][[i]]
-  if(grepl('Metrics Dashboard', paste(board[11, 'text']))){
+    if(grepl('Metrics Dashboard', paste(board[11, 'text']))){
     projects <- projects %>% 
       rbind(c(paste(activeProjects[i, 'id']), i, c(paste(activeProjects[i, 'name'])))) 
-  }
+    }
 }
 
 names(projects) <- c('id', 'row', 'name')
@@ -547,7 +585,17 @@ contentSummary <- socialContent %>%
 #ALL_CONTENT_SUMMARY <- pushData(contentSummary, 'Content Summary')
 
 
+# Delete all existing content for campaign from database
 
+tables <- dbListTables(con)
+
+tables <- tables %>%
+  select(-c(targetcampaign))
+
+for (i in tables){
+  query <- paste0("DELETE FROM ",i, " where campaignID ='",campaignID, "'")
+  dbSendQuery(con, query)
+}
 
 #########################################################3
 
@@ -557,6 +605,8 @@ dfs <- list("allTraffic" = allTraffic, "socialTraffic" = socialTraffic, "geograp
             "mediaReferrals" = mediaReferrals, "campaignNewsletters" =  campaignNewsletters, 
             "SFcampaigns"= SFcampaigns,"donations"= donations, "campaignPosts" = campaignPosts, 
             "targetCampaign"= targetCampaign, "contentSummary"= contentSummary)
+
+dbWriteTable(con, name = 'targetCampaign', value = targetCampaign, append = T)
 
 for(i in dfs){
   dbWriteTable(con, i, i)
