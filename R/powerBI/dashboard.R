@@ -54,9 +54,6 @@ pardotBusinessID <- Sys.getenv("Pardot_Business_ID")
 header4 <- c("Authorization" = pardotTokenV4, "Pardot-Business-Unit-Id" = pardotBusinessID)
 header5 <- c("Authorization" = pardotTokenV5, "Pardot-Business-Unit-Id" = pardotBusinessID)
 
-#' Google Authentication
-#options(gargle_oauth_cache = ".secrets")
-#gs4_auth(cache = ".secrets", email = "sazhu24@amherst.edu")
 
 ## GA Authentication
 ga_auth(email = "ghoffman@rmi.org")
@@ -66,37 +63,46 @@ sf_auth()
 
 
 ## set google sheet
-ss <- 'OCI+ Dashboard Dataset.xlsx'
-#  'https://docs.google.com/spreadsheets/d/1FtZQKYp4ESsY5yQzKuvGT5TorKSyMdvRo4bxg6TI7DU/edit?usp=sharing'
+ss <- 'COP28_testing Dashboard Dataset.xlsx'
 
-#' set mode
-#' - standard mode binds data to existing rows
-#' - development mode overwrites all data in sheet
-mode <- 'development'
+
 
 #### SET CAMPAIGN ####
 
-#' current options:
-#' 1. OCI 
-#' 2. Coal v Gas
 
 campaigns <- c('OCI', 'Coal v Gas', "COP28")
-campaign <- campaigns[1]
+campaign <- campaigns[3]
 campaignID <- campaign
+
+# Use this once ready to process for multiple campaigns
+for (i in campaigns){
+  campaign <- i
+  print(campaign)
+}
 
 ### READ CAMPAIGN KEY
 campaignKey <- read.xlsx('Campaign Key.xlsx', sheet = paste0('Campaign Key - ', campaign))
 
 
-campaignID <- as.character(campaignKey[1, c('campaignID')])
+#campaignID <- as.character(campaignKey[1, c('campaignID')])
 campaignPages <- campaignKey[, c('propertyID', 'page')]
 
 propertyIDs <- unique(campaignKey$propertyID)
 propertyIDs <- propertyIDs[!is.na(propertyIDs)]
 
+
+
+#if (campaignID == 'COP28') campaignReports <- campaignKey[campaignKey$type =='Report', 'type'] %>%
+ # as.data.frame() %>% rename('reportID'='.') else 
+
 campaignReports <- campaignKey[!is.na(campaignKey$reportID), 'reportID'] %>%
   as.data.frame() %>%
   rename('reportID'='.')
+
+
+#if (campaignID == 'COP28') campaignEvents <- campaignKey[campaignKey$type=='Event', 'type'] %>%
+ # as.data.frame() %>% rename('eventID'='.') else 
+    
 campaignEvents <- campaignKey[!is.na(campaignKey$eventID), 'eventID'] %>%
   as.data.frame() %>%
   rename('eventID'='.')
@@ -104,7 +110,8 @@ campaignEvents <- campaignKey[!is.na(campaignKey$eventID), 'eventID'] %>%
 if(length(campaignReports) == 0) hasReport <- FALSE else hasReport <- TRUE
 if(length(campaignEvents) == 0) hasEvent <- FALSE else hasEvent <- TRUE
 
-socialTag <- as.character(campaignKey[1, c('socialTag')])
+if(campaignID == 'COP28') socialTag <- 'COP28' else 
+  socialTag <- as.character(campaignKey[1, c('socialTag')])
 
 
 #### GOOGLE ANALYTICS ####
@@ -131,36 +138,6 @@ metadataGA4 <- ga_meta(version = "data", rmiPropertyID)
 dateRangeGA <- c("2023-01-01", paste(currentDate))
 
 
-##########################################################333
-###############################################################3
-
-
-
-
-
-# pages <- ga_data(
-#   rmiPropertyID,
-#   metrics = c('screenPageViews', "totalUsers", "userEngagementDuration"),
-#   dimensions = c("pageTitle", "date"),
-#   date_range = dateRangeGA,
-#   limit = -1)
-# 
-# 
-# 
-
-
-
-
-
-
-
-
-
-###################################################333
-########################################################33
-
-
-
 ### get referral sites
 referralSites <- read.xlsx('Referral Site Categories.xlsx', sheet = 'All Referral Sites')
 
@@ -173,9 +150,16 @@ pageData <- data.frame(site = campaignPages$site,
                        pageURL = campaignPages$page, 
                        pageTitle = '', 
                        pageType = '', 
-                       metadata = '')
+                       metadata = '',
+                       program = '')
 
 pageData <- getPageData(pageData)
+
+# Hard code section for pages without pageType in metadata
+pageData <- pageData %>% 
+  mutate(pageType = ifelse(pageTitle == 'RMI at COP - RMI', 'Hub', pageType),
+         pageType = ifelse(pageTitle == 'RMI China Seminar at COP28', 'Event', pageType))
+
 
 #' set page titles
 rmiPages <- pageData %>% filter(site == 'rmi.org')
@@ -195,6 +179,8 @@ geographyTraffic <- getTrafficGeography(rmiPropertyID, pages)
 
 #' get referrals
 mediaReferrals <- getReferrals(rmiPropertyID, pages)
+
+
 
 #' get data for new website if a new GA property ID is provided
 if(length(propertyIDs) > 1){
@@ -227,7 +213,7 @@ if(length(propertyIDs) > 1){
     select(site, pageTitle) %>% 
     distinct() %>% 
     plyr::rbind.fill(acquisition) %>% 
-    pivot_longer(cols = c(Sessions:'Form Submissions'), names_to = "type", values_to = "count") %>% 
+    pivot_longer(cols = c(Sessions:DonationPageViews), names_to = "type", values_to = "count") %>% 
     mutate(count = round(count, 1)) %>% 
     left_join(select(pageMetrics, c(pageTitle, screenPageViews:avgEngagementDuration, pageType, icon)), by = 'pageTitle') %>% 
     mutate(count = as.numeric(ifelse(is.na(count), 0, count))) %>% 
@@ -266,9 +252,9 @@ if(length(propertyIDs) > 1){
     select(site, pageTitle) %>% 
     distinct() %>% 
     plyr::rbind.fill(acquisition) %>% 
-    pivot_longer(cols = c(Sessions:'Form Submissions'), names_to = "type", values_to = "count") %>% 
+    pivot_longer(cols = c(Sessions:DonationPageViews), names_to = "type", values_to = "count") %>% # Update to add additional GA4 goals in the select function
     mutate(count = round(count, 1)) %>% 
-    left_join(select(pageMetrics, c(pageTitle, screenPageViews:avgEngagementDuration, pageType, icon)), by = 'pageTitle') %>% 
+    left_join(select(pageMetrics, c(pageTitle, screenPageViews:avgEngagementDuration, pageType, program, icon)), by = 'pageTitle') %>% 
     mutate(count = as.numeric(ifelse(is.na(count), 0, count))) %>% 
     filter(defaultChannelGroup != 'Unassigned' & !is.na(defaultChannelGroup)) 
   
@@ -281,14 +267,8 @@ if(length(propertyIDs) > 1){
 
 }
 
-
-#' push data
-#message('PUSHING GOOGLE ANALYTICS DATA')
-
-#ALL_WEB_TRAFFIC <- pushData(allTraffic, sheetName = 'Web Traffic - All')
-#ALL_WEB_SOCIAL <- pushData(socialTraffic, sheetName = 'Web Traffic - Social')
-#ALL_WEB_GEO <- pushData(geographyTraffic, sheetName = 'Web Traffic - Geography')
-#ALL_WEB_REFERRALS <- pushData(mediaReferrals, sheetName = 'Web Traffic - Referrals')
+allTraffic <- allTraffic %>%
+  filter(!is.na(pageType))
 
 
 ####'EMAIL NEWSLETTERS ####
@@ -301,6 +281,7 @@ message('GETTING NEWSLETTERS DATA')
 #' 3. Write dataset
 
 #' get all email stats 
+#' 
 
 if(!exists('allEmailStats')){
   allEmailStats <- getAllEmailStats()
@@ -321,7 +302,6 @@ if(nrow(campaignNewsletters) == 0) hasEmail <- FALSE else hasEmail <- TRUE
   
  # ALL_NEWSLETTERS <- pushData(campaignNewsletters, 'Newsletters')
 #}
-
 
 
 #### SALESFORCE ####
@@ -409,16 +389,14 @@ if(hasReport == TRUE | hasEvent == TRUE | hasEmail == TRUE){
     select(CampaignName, EngagementType, Icon, Id, Status, EngagementDate, Domain, Email, 
            DonorType, AttributtedDonationValue, AccountId, Account, AccountType, Audience1, Audience2, Industry, 
            Pardot_URL, Pardot_ID, GivingCircleTF, SolutionsCouncilTF, InnovatorsCircleTF, OpenOppTF, DonorTF, 
-           LapsedDonorsTF, DownloadTF, EventTF, EmailClickTF, Engagements)
+           LapsedDonorsTF, DownloadTF, EventTF, EmailClickTF, Engagements) %>%
+    mutate(CampaignName = case_when(EngagementType == 'Report Download' ~ 
+                                      substring(CampaignName, 11),
+                                    EngagementType == 'Event' ~ 
+                                      substring(CampaignName, 11),
+                                    TRUE ~ CampaignName),
+           CampaignName = trimws(CampaignName))
 }
-
-
-
-#' push data
-message('PUSHING SALESFORCE DATA')
-
-#ALL_SALESFORCE <- pushData(SFcampaigns, 'Salesforce')
-#ALL_DONATIONS <- pushData(donations, 'SF Donations')
 
 
 
@@ -502,7 +480,6 @@ message('GETTING MONDAY.COM DATA')
 # res <- getMondayCall(query)
 # check <- as.data.frame(res[["data"]][["boards"]][["items"]][[1]])
 
-
 #' get Active Projects Board
 query <- "query { boards (ids: 2208962537) { items { id name column_values{ id value text } } } } "
 res <- getMondayCall(query)
@@ -522,16 +499,20 @@ for(i in 1:nrow(activeProjects)){
 
 names(projects) <- c('id', 'row', 'name')
 
+# Pulled this out from the loop, before it was included in the following loop and would be overwritten each time
+metricsDashboardCampaigns <- data.frame(CAMPAIGN_ID = '', name = '', ID = '', audiences = '',metrics = '', promotionTactics = '')[0,]
+
 for(i in 1:nrow(projects)){
   
-  metricsDashboardCampaigns <- data.frame(CAMPAIGN_ID = '', ID = '', audiences = '', promotionTactics = '')[0,]
-  
+
   #' get promotion tactics, audiences, and ID
-  campaignRow <- as.numeric(projects[1, 'row'])
+  campaignRow <- as.numeric(projects[i, 'row']) # Changed this from 1 to i to get the correct row, before it was just looking at the first row
   campaignBoard <- activeProjects[[3]][[campaignRow]]
   campaignDF <- data.frame(CAMPAIGN_ID = campaignID,
-                           ID = campaignBoard[16, 'text'], 
-                           audiences = campaignBoard[15, 'text'], 
+                           name = projects[i, 'name'],
+                           ID = campaignBoard[17, 'text'], 
+                           audiences = campaignBoard[16, 'text'], 
+                           metrics = campaignBoard[15, 'text'],
                            promotionTactics = campaignBoard[11, 'text']) 
   
   metricsDashboardCampaigns <- metricsDashboardCampaigns %>% rbind(campaignDF)
@@ -542,10 +523,14 @@ metricsDashboardCampaigns <- metricsDashboardCampaigns %>%
   mutate(promotionTactics = gsub(', Metrics Dashboard', '', promotionTactics))
 
 #' filter by campaign ID
-targetCampaign <- metricsDashboardCampaigns %>% 
-  filter(CAMPAIGN_ID == campaignID)
+# targetCampaign <- metricsDashboardCampaigns %>% 
+#   filter(CAMPAIGN_ID == campaignID)
 
-#' push data
+targetCampaign <- metricsDashboardCampaigns %>%
+  filter(ID == campaignID)
+
+
+  #' push data
 #message('PUSHING MONDAY.COM DATA')
 
 #ALL_MONDAY <- pushData(targetCampaign, 'Campaign Overview')
@@ -586,31 +571,106 @@ contentSummary <- socialContent %>%
 
 
 # Delete all existing content for campaign from database
+con <- dbConnect(
+  RMariaDB::MariaDB(),
+  dbname = 'rmi_influence_campaign',
+  username = Sys.getenv('DBASE_USER'),
+  password = Sys.getenv("DBASE_PWD"),
+  host = Sys.getenv('DBASE_IP'),
+  port = '3306',
+  ssl.ca = normalizePath("C:\\Users\\ghoffman\\OneDrive - RMI\\01. Projects\\DigiCertGlobalRootCA.crt.pem")
+)
 
 tables <- dbListTables(con)
 
-tables <- tables %>%
-  select(-c(targetcampaign))
+dbDisconnect(con)
+
+
+# tables <- tables %>%
+#   str_replace("targetcampaign", "")
+con <- dbConnect(
+  RMariaDB::MariaDB(),
+  dbname = 'rmi_influence_campaign',
+  username = Sys.getenv('DBASE_USER'),
+  password = Sys.getenv("DBASE_PWD"),
+  host = Sys.getenv('DBASE_IP'),
+  port = '3306',
+  ssl.ca = normalizePath("C:\\Users\\ghoffman\\OneDrive - RMI\\01. Projects\\DigiCertGlobalRootCA.crt.pem")
+)
 
 for (i in tables){
   query <- paste0("DELETE FROM ",i, " where campaignID ='",campaignID, "'")
   dbSendQuery(con, query)
 }
 
+
+dbDisconnect(con)
+
 #########################################################3
 
+geographyTraffic <- geographyTraffic %>%
+  rename(regionPageViews = c("Region Page Views"))
 
+
+
+
+# Add campaignID to all dfs
+
+allTraffic$campaignID = campaignID
+socialTraffic$campaignID = campaignID
+geographyTraffic$campaignID = campaignID
+mediaReferrals$campaignID = campaignID
+campaignNewsletters$campaignID = campaignID
+SFcampaigns$campaignID = campaignID
+donations$campaignID = campaignID
+campaignPosts$campaignID = campaignID
+
+targetCampaign$campaignID = targetCampaign$CAMPAIGN_ID
+targetCampaign <- select(targetCampaign, -c(CAMPAIGN_ID, name))
+
+contentSummary$campaignID = campaignID
+
+
+# Write data to database
+
+con <- dbConnect(
+  RMariaDB::MariaDB(),
+  dbname = 'rmi_influence_campaign',
+  username = Sys.getenv('DBASE_USER'),
+  password = Sys.getenv("DBASE_PWD"),
+  host = Sys.getenv('DBASE_IP'),
+  port = '3306',
+  ssl.ca = normalizePath("C:\\Users\\ghoffman\\OneDrive - RMI\\01. Projects\\DigiCertGlobalRootCA.crt.pem")
+)
 
 dfs <- list("allTraffic" = allTraffic, "socialTraffic" = socialTraffic, "geographyTraffic" = geographyTraffic, 
             "mediaReferrals" = mediaReferrals, "campaignNewsletters" =  campaignNewsletters, 
             "SFcampaigns"= SFcampaigns,"donations"= donations, "campaignPosts" = campaignPosts, 
             "targetCampaign"= targetCampaign, "contentSummary"= contentSummary)
 
+
 dbWriteTable(con, name = 'targetCampaign', value = targetCampaign, append = T)
+dbWriteTable(con, name = 'allTraffic', value = allTraffic, append = T)
+dbWriteTable(con, name = 'socialTraffic', value = socialTraffic, append = T)
+dbWriteTable(con, name = 'geographyTraffic', value = geographyTraffic, append = T)
+dbWriteTable(con, name = 'mediaReferrals', value = mediaReferrals, append = T)
+dbWriteTable(con, name = 'campaignNewsletters', value = campaignNewsletters, append = T)
+dbWriteTable(con, name = 'campaignPosts', value = campaignPosts, append = T)
+dbWriteTable(con, name = 'SFcampaigns', value = SFcampaigns, append = T)
+dbWriteTable(con, name = 'contentSummary', value = contentSummary, append = T)
+dbWriteTable(con, name = 'donations', value = donations, append = T)
+
+
+# query <- paste0("DELETE FROM targetCampaign where campaignID ='",campaignID, "'")
+# dbSendQuery(con, query)
+
+dbDisconnect(con)
+
+
 
 for(i in dfs){
-  dbWriteTable(con, i, i)
 
+  dbWriteTable(con, i, i, append = T)
 }
 
 write_xlsx(dfs, path = ss)

@@ -5,34 +5,34 @@
 
 #' function that 1. binds the Campaign ID to all final dataframes and 2. pushes the data to a google sheet
 #' if data already exists in sheet, df is bound to existing data and pushed
-pushData <- function(df, sheetName){
-  
-  #' bind campaign ID
-  df <- df %>% 
-    mutate(CAMPAIGN_ID = campaignID) %>% 
-    relocate(CAMPAIGN_ID, .before = 1)
-  
-  tryCatch({ 
-    
-    existingData <- read.xlsx(file = ss, sheet = sheetName) %>% 
-      rbind(df)
-    
-    #' if development mode is on, overwrite data in sheet
-    if(mode == 'development'){
-      write.xlsx(df, file = ss, sheetName = sheetName, overwrite = T, append = T) 
-      return(df)
-    } else {
-      write.xlsx(existingData, file = ss, sheetName = sheetName, overwrite = F) 
-      return(existingData)
-    }
-    
-    
-  }, error = function(e) { 
-    write.xlsx(df, file = ss, sheetName = sheetName) 
-    return(df) 
-  })
-
-}
+#' pushData <- function(df, sheetName){
+#'   
+#'   #' bind campaign ID
+#'   df <- df %>% 
+#'     mutate(CAMPAIGN_ID = campaignID) %>% 
+#'     relocate(CAMPAIGN_ID, .before = 1)
+#'   
+#'   tryCatch({ 
+#'     
+#'     existingData <- read.xlsx(file = ss, sheet = sheetName) %>% 
+#'       rbind(df)
+#'     
+#'     #' if development mode is on, overwrite data in sheet
+#'     if(mode == 'development'){
+#'       write.xlsx(df, file = ss, sheetName = sheetName, overwrite = T, append = T) 
+#'       return(df)
+#'     } else {
+#'       write.xlsx(existingData, file = ss, sheetName = sheetName, overwrite = F) 
+#'       return(existingData)
+#'     }
+#'     
+#'     
+#'   }, error = function(e) { 
+#'     write.xlsx(df, file = ss, sheetName = sheetName) 
+#'     return(df) 
+#'   })
+#' 
+#' }
 
 
 #### GOOGLE ANALYTICS ####
@@ -66,13 +66,17 @@ getPageData <- function(df){
           read_html() %>% 
           html_nodes('script') %>% 
           html_text() %>% 
-          as.data.frame() %>% 
+          as.data.frame() %>%
           rename(node = 1) %>% 
           filter(grepl('schema.org', node)) %>% 
+          mutate(program = str_extract(node, 'articleSection\\":\\"([^"]+)\\"'),
+                 program = gsub('articleSection":"',"",program),
+                 program = gsub('"', "", program)) %>%
           mutate(keywords = sub('.*keywords\\"\\:\\[', "", node),
                  keywords = gsub('\\].*', "", keywords))
         
         df[i, 'metadata'] <- url_tb[2, 'keywords']
+        df[i, 'program'] <- url_tb[2, 'program']
         
       }, error = function(e){
         df[i, 'metadata'] <- NA
@@ -87,10 +91,25 @@ getPageData <- function(df){
   
   #' categorize as 'Article' or 'Report' if these terms are detected in the metadata
   df <- df %>% 
-    mutate(pageType = ifelse(grepl('article', tolower(metadata)), 'Article',
-                             ifelse(grepl('report', tolower(metadata)), 'Report', pageType)),
-           icon = ifelse(grepl('article', tolower(metadata)), 4,
-                         ifelse(grepl('report', tolower(metadata)), 1, 5))) %>% 
+    # mutate(pageType = ifelse(grepl('article', tolower(metadata)), 'Article',
+    #                          ifelse(grepl('report', tolower(metadata)), 'Report',
+    #                                 ifelse(grepl('news release', tolower(metadata)), 'News Release',
+    #                                        pageType)),
+      mutate(pageType = case_when(grepl('article', tolower(metadata)) ~ 'Article',
+                                  grepl('report', tolower(metadata)) ~ 'Report',
+                                  grepl('news', tolower(metadata)) ~ 'News Release',
+                                  grepl('event', tolower(pageURL)) ~ 'Event',
+                                  grepl('hub', tolower(pageURL)) ~ 'Hub',
+                                  TRUE ~ pageType),
+            icon = case_when(grepl('article', tolower(metadata)) ~ 4,
+                             grepl('report', tolower(metadata)) ~ 1,
+                             grepl('news', tolower(metadata)) ~ 2,
+                             grepl('event', tolower(pageURL)) ~ 3,
+                             grepl('hub', tolower(pageURL)) ~ 6,
+                             TRUE ~ 5)) %>%
+              
+              # ifelse(grepl('article', tolower(metadata)), 4,
+              #            ifelse(grepl('report', tolower(metadata)), 1, 5))) %>% 
     distinct(pageTitle, .keep_all = TRUE)
   
 }
@@ -111,7 +130,7 @@ getPageMetrics <- function(propertyID, pages){
            min = (engagementDuration / 60) |> floor(),
            avgEngagementDuration = paste0(min, ':', ifelse(nchar(sec) == 1, paste0('0', sec), sec))) %>% 
     select(pageTitle, screenPageViews, totalUsers, engagementDuration, avgEngagementDuration) %>% 
-    left_join(select(pageData, c(pageTitle, pageType, icon)), by = c('pageTitle')) %>% 
+    left_join(select(pageData, c(pageTitle,program, pageType, icon)), by = c('pageTitle')) %>% 
     #' remove " - RMI" from end of page titles
     mutate(pageTitle = gsub(' - RMI', '', pageTitle))
   
@@ -130,7 +149,7 @@ correctTraffic <- function(df, type){
   df <- df %>% 
     mutate(pageTitle = gsub(' - RMI', '', pageTitle)) %>% 
     mutate(medium = ifelse(grepl('mail.google.com', source)|grepl('web-email|sf|outlook', medium), 'email', medium),
-           source = ifelse(grepl('linkedin|lnkd.in', source), 'linkedin', source),
+           source = ifelse(grepl('linkedin|lnkd.in|li', source), 'linkedin', source),
            source = ifelse(grepl('facebook', source), 'facebook', source),
            source = ifelse(grepl('dlvr.it|twitter', source)|source == 't.co', 'twitter', source),
            medium = ifelse(grepl('linkedin|lnkd.in|facebook|twitter|instagram', source)|grepl('twitter|fbdvby', medium), 'social', medium),
@@ -205,28 +224,32 @@ getAcquisition <- function(propertyID, pages, site = 'rmi.org'){
     arrange(pageTitle) 
   
   acquisition <- correctTraffic(aquisitionSessions, 'session') %>% 
+    mutate(defaultChannelGroup = case_when(defaultChannelGroup == 'Organic Video' ~ 'Organic Search',
+                                           defaultChannelGroup == 'Organic Social' ~ 'Social Media',
+                                           TRUE ~ defaultChannelGroup)) %>%
     group_by(pageTitle, defaultChannelGroup) %>% 
     summarize(Sessions = sum(sessions))
-  
+
   if(site == 'rmi.org'){
     
     #' 2) get conversions
     aquisitionConversions <- ga_data(
       propertyID,
-      metrics = c('conversions:form_submit', 'conversions:file_download'),
+      metrics = c('conversions:emailFormSubmit', 'conversions:downloadThankYou', 'conversions:donatePageView_Embedded'), # add new custom conversions here
       dimensions = c("pageTitle", "source", "medium", 'pageReferrer', 'defaultChannelGroup'),
       date_range = dateRangeGA,
       dim_filters = ga_data_filter("pageTitle" == pages),
       limit = -1
     ) %>% 
       select(pageTitle, source, medium, pageReferrer, defaultChannelGroup, 
-             form_submit = 'conversions:form_submit', download = 'conversions:file_download') %>% 
+             form_submit = 'conversions:emailFormSubmit', download = 'conversions:downloadThankYou', 
+             donate_view = 'conversions:donatePageView_Embedded') %>% # Add new conversions in select function
       arrange(pageTitle)
     
     aquisitionConversions <- correctTraffic(aquisitionConversions, 'conversion') %>% 
       group_by(pageTitle, defaultChannelGroup) %>% 
       summarize('Downloads' = sum(download),
-                       'Form Submissions' = sum(form_submit)) 
+                       'Form Submissions' = sum(form_submit), 'DonationPageViews' = sum(donate_view)) # add aggregation for new conversions here 
     
     #' 3) bind sessions + conversions 
     acquisition <- acquisition %>% 
@@ -235,7 +258,7 @@ getAcquisition <- function(propertyID, pages, site = 'rmi.org'){
   }
   
   acquisition <- acquisition %>% 
-    mutate(site = site)
+    mutate(site = site, pageTitle = gsub(' - RMI', '', pageTitle))
   
   return(acquisition)
   
@@ -278,11 +301,11 @@ getReferrals <- function(propertyID, pages, site = 'rmi.org'){
 getAllEmailStats <- function(){
   
   #' get Spark newsletters
-  emailStatsSpark <- read_sheet('https://docs.google.com/spreadsheets/d/1HoSpSuXpGN9tiKsggHayJdnmwQXTbzdrBcs_sVbAgfg/edit#gid=1938257643', sheet = 'All Spark Stats (Unformatted)') %>% 
+  emailStatsSpark <- read_csv('allSparkStats.csv', show_col_types = FALSE) %>% 
     mutate(date = as.Date(date))
   
   #' get Market Catalyst newsletters
-  emailStatsPEM <- read_sheet('https://docs.google.com/spreadsheets/d/1HoSpSuXpGN9tiKsggHayJdnmwQXTbzdrBcs_sVbAgfg/edit#gid=1938257643', sheet = 'All Market Catalyst Stats (Unformatted)') %>% 
+  emailStatsPEM <- read_csv('allMCStats.csv', show_col_types = FALSE) %>% 
     mutate(date = as.Date(date))
   
   #' bind 
@@ -300,22 +323,35 @@ getAllEmailStats <- function(){
 getCampaignEmails <- function(pageURLs){
   
   #' filter each of the 3 "story_url" columns for campaign web page URLs
-  df1 <- allEmailStats %>% select(c('id':'COR_S1')) %>% 
-    rename(story_url = url_1,
-           story_title = title_1,
-           story_clicks = clicks_1, 
-           story_COR = COR_S1)
+  # df1 <- allEmailStats %>% select(c('id':'COR_S1')) %>% 
+  #   rename(story_url = url_1,
+  #          story_title = title_1,
+  #          story_clicks = clicks_1, 
+  #          story_COR = COR_S1)
+  df1 <- allEmailStats %>% select(c('id':'COR')) %>% 
+    rename(story_url = url,
+           story_title = title,
+           story_clicks = clicks, 
+           story_COR = COR)
   
-  df2 <- allEmailStats %>% select(c('id':'plaintext_rate', 'url_2':'COR_S2'))
-  names(df2) <- names(df1)
-  
-  df3 <- allEmailStats %>% select(c('id':'plaintext_rate', 'url_3':'COR_S3'))
-  names(df3) <- names(df1)
+  # df2 <- allEmailStats %>% select(c('id':'plaintext_rate', 'url_2':'COR_S2'))
+  # names(df2) <- names(df1)
+  # 
+  # df3 <- allEmailStats %>% select(c('id':'plaintext_rate', 'url_3':'COR_S3'))
+  # names(df3) <- names(df1)
+  # 
+  # df4 <- allEmailStats %>% select(c('id':'plaintext_rate', 'url_4':'COR_S4'))
+  # names(df4) <- names(df1)
   
   #' bind matches
+  # allStoryStats <- df1 %>% 
+  #   rbind(df2) %>% 
+  #   rbind(df3) %>% 
+  #   filter(grepl(paste(pageURLs, collapse = '|'), story_url)) %>% 
+  #   mutate(date = as.Date(date),
+  #          story_title = gsub(' - RMI', '', story_title))
+  
   allStoryStats <- df1 %>% 
-    rbind(df2) %>% 
-    rbind(df3) %>% 
     filter(grepl(paste(pageURLs, collapse = '|'), story_url)) %>% 
     mutate(date = as.Date(date),
            story_title = gsub(' - RMI', '', story_title))
@@ -580,10 +616,18 @@ getCampaignMembers <- function(campaignIdList, campaignType) {
     CampaignMembers <- CampaignMembers %>% 
       mutate(EngagementType = 'Event',
              #' rename status categories and filter for rows where status is "registered" or "attended"
-             Status = ifelse(grepl('Register', Status), 'Registered (Did Not Attend)', Status)) %>% 
+             #' Updated on 1/17/24 to included registrations as attended
+             #' "Registered - In Person", "WAITLIST" , "Registered - Virtual", and "Clicked to Register"
+            # Status = ifelse(grepl('Register', Status), 'Registered (Did Not Attend)', Status),
+             Status = case_when(grepl('Register', Status) ~ 'Attended',
+                                grepl('WAITLIST', Status) ~ 'Attended',
+                                TRUE ~ Status)) %>%
+      
       filter(grepl('Register|Attended', Status))
     
-  } else if (campaignType == 'Report'){
+  } 
+  
+  else if (campaignType == 'Report'){
     
     CampaignMembers <- CampaignMembers %>% 
       mutate(EngagementType = 'Report Download') 
@@ -612,16 +656,16 @@ cleanCampaignDF <- function(df){
       DonorType = 
         #' define donor type
         case_when(
-           !is.na(Giving_Circle) ~ Giving_Circle,
-           !is.na(Last_Gift) ~ 'Donor'
-           ),
+          !is.na(Giving_Circle) ~ as.character(Giving_Circle),
+          !is.na(Last_Gift)  ~ "Donor",
+          TRUE ~ NA_character_)
+      ,
       #' define icon for Power BI
       Icon = 
         case_when(
-           EngagementType == 'Report Download' ~ 1,
-           EngagementType == 'Event' ~ 2, 
-           EngagementType == 'Newsletter' ~ 3 
-           ),
+          EngagementType == 'Report Download' ~ 1,
+          EngagementType == 'Event' ~ 2, 
+          EngagementType == 'Newsletter' ~ 3),
       #' get Pardot ID from Pardot URL
       Pardot_ID = sub("(.*)=", "", Pardot_URL)) %>% 
     #' join all accounts based on email domain
