@@ -45,7 +45,7 @@ mondayToken <- Sys.getenv("Monday_Token")
 sproutToken <- Sys.getenv("SproutSocial_Token")
 sproutHeader <- c("Authorization" = sproutToken, "Accept" = "application/json", "Content-Type" = "application/json")
 currentDate <- paste(Sys.Date())
-oneYearAgo <- ymd(currentDate) - years(1)
+sixMonthsAgo <- ymd(currentDate) - months(6) # Updated to 6 months on 2/5/2024.
 
 #' Pardot API Token & Request Headers
 pardotTokenV4 <- Sys.getenv("Pardot_TokenV4")
@@ -458,11 +458,6 @@ if(campaign == 'OCI'){
     distinct(perma_link, .keep_all = TRUE) 
 }
 
-#' push data
-#message('PUSHING SOCIAL MEDIA DATA')
-
-#ALL_SOCIAL_POSTS <- pushData(campaignPosts, 'Social Media Posts')
-
 
 ####' Monday.com ####
 message('GETTING MONDAY.COM DATA')
@@ -476,31 +471,44 @@ message('GETTING MONDAY.COM DATA')
 #' 5. Write data set
 #' 
 
-# query <- "query { boards (ids: 3987200449) { items { id name column_values{ id value text } } } } "
-# res <- getMondayCall(query)
-# check <- as.data.frame(res[["data"]][["boards"]][["items"]][[1]])
 
 #' get Active Projects Board
-query <- "query { boards (ids: 2208962537) { items { id name column_values{ id value text } } } } "
+#query <- "query { boards (ids: 2208962537) { items { id name column_values{ id value text } } } } "
+query <- "query { boards (ids: 2208962537) { items_page(limit: 500) { cursor items { id name column_values{ id value text } } } } } "
+
+# Working to update API query to only get projects with "Metrics Dashboard" in the promotion tactics column direct from Monday
+# query <- "query { items_page_by_column_values (limit: 500, board_id: 2208962537, columns: [{column_id: \"dropdown\", column_values: [\"Metrics Dashboard\"]}]) { cursor items { id  name  }  } } "
+# activeProjectsID<- as.data.frame(res[["data"]][["items_page_by_column_values"]][["items"]][[1]])
+# activeProjectsName <- as.data.frame(res[["data"]][["items_page_by_column_values"]][["items"]][[2]])
+# projects <- cbind(activeProjectsID, activeProjectsName)
+# names(projects) <- c('id', 'name')
+
+
 res <- getMondayCall(query)
-activeProjects <- as.data.frame(res[["data"]][["boards"]][["items"]][[1]])
+
+activeProjects <- as.data.frame(res[["data"]][["boards"]][["items_page"]][["items"]][[1]])
+
+
 
 #' loop through Active Projects Board to find projects with "Metrics Dashboard" in the promotion tactics column
 projects <- data.frame(id = '', row = '', name = '')[0,]
 
 for(i in 1:nrow(activeProjects)){
-  
+
   board <- activeProjects[[3]][[i]]
     if(grepl('Metrics Dashboard', paste(board[11, 'text']))){
-    projects <- projects %>% 
-      rbind(c(paste(activeProjects[i, 'id']), i, c(paste(activeProjects[i, 'name'])))) 
-    }
-}
+    projects <- projects %>%
+      rbind(c(paste(activeProjects[i, 'id']), i, c(paste(activeProjects[i, 'name']))))
+     }
+ }
 
 names(projects) <- c('id', 'row', 'name')
 
+
 # Pulled this out from the loop, before it was included in the following loop and would be overwritten each time
 metricsDashboardCampaigns <- data.frame(CAMPAIGN_ID = '', name = '', ID = '', audiences = '',metrics = '', promotionTactics = '')[0,]
+
+row.names(campaignBoard) <- campaignBoard$id
 
 for(i in 1:nrow(projects)){
   
@@ -510,9 +518,16 @@ for(i in 1:nrow(projects)){
   campaignBoard <- activeProjects[[3]][[campaignRow]]
   campaignDF <- data.frame(CAMPAIGN_ID = campaignID,
                            name = projects[i, 'name'],
-                           ID = campaignBoard[17, 'text'], 
-                           audiences = campaignBoard[16, 'text'], 
-                           metrics = campaignBoard[15, 'text'],
+                           ID = campaignBoard[16, 'text'], 
+                           # Assign value from text column to ID where id column equals text1
+                         #  ID = campaignBoard['text1', 'text'],
+                           
+                           audiences = campaignBoard[15, 'text'], 
+                          # audiences = campaignBoard['dropdown7', 'text'], 
+                      
+                           metrics = campaignBoard[14, 'text'],
+                          # metrics = campaignBoard['dropdown0', 'text'],
+                      
                            promotionTactics = campaignBoard[11, 'text']) 
   
   metricsDashboardCampaigns <- metricsDashboardCampaigns %>% rbind(campaignDF)
@@ -522,18 +537,10 @@ for(i in 1:nrow(projects)){
 metricsDashboardCampaigns <- metricsDashboardCampaigns %>% 
   mutate(promotionTactics = gsub(', Metrics Dashboard', '', promotionTactics))
 
-#' filter by campaign ID
-# targetCampaign <- metricsDashboardCampaigns %>% 
-#   filter(CAMPAIGN_ID == campaignID)
 
 targetCampaign <- metricsDashboardCampaigns %>%
   filter(ID == campaignID)
 
-
-  #' push data
-#message('PUSHING MONDAY.COM DATA')
-
-#ALL_MONDAY <- pushData(targetCampaign, 'Campaign Overview')
 
 
 #### CREATE CONTENT SUMMARY ####
@@ -566,8 +573,26 @@ contentSummary <- socialContent %>%
   rbind(salesforceContent) %>% 
   rbind(mediaContent)
 
-#message('PUSHING CONTENT SUMMARY')
-#ALL_CONTENT_SUMMARY <- pushData(contentSummary, 'Content Summary')
+
+# Check to verify dataframes have more than 1 row, if not stop the script
+
+dfs <- list(allTraffic, socialTraffic, geographyTraffic, mediaReferrals, 
+            campaignNewsletters, SFcampaigns, donations, campaignPosts, 
+            targetCampaign, contentSummary)
+
+dfs <- dfs %>% 
+  set_names(c('allTraffic', 'socialTraffic', 'geographyTraffic', 'mediaReferrals', 
+              'campaignNewsletters', 'SFcampaigns', 'donations', 'campaignPosts', 
+              'targetCampaign', 'contentSummary'))
+
+
+for (i in seq_along(dfs)) {
+  if (nrow(dfs[[i]]) < 1) {
+    # identify which data frame is empty by list item name
+    stop('Empty dataframe: ', names(dfs)[i])
+  }
+}
+
 
 
 # Delete all existing content for campaign from database
@@ -585,9 +610,34 @@ tables <- dbListTables(con)
 
 dbDisconnect(con)
 
+# compare audience values from targetcampaign in database and data frame
+# drop records already in database
+con <- dbConnect(
+  RMariaDB::MariaDB(),
+  dbname = 'rmi_influence_campaign',
+  username = Sys.getenv('DBASE_USER'),
+  password = Sys.getenv("DBASE_PWD"),
+  host = Sys.getenv('DBASE_IP'),
+  port = '3306',
+  ssl.ca = normalizePath("C:\\Users\\ghoffman\\OneDrive - RMI\\01. Projects\\DigiCertGlobalRootCA.crt.pem")
+)
 
-# tables <- tables %>%
-#   str_replace("targetcampaign", "")
+query <- paste0("SELECT audiences, metrics FROM targetcampaign where campaignID ='",campaignID, "'")
+check_monday <- dbSendQuery(con, query) %>% dbFetch() %>% as.data.frame()
+
+check_monday <- check_monday %>%
+  mutate(check = paste(audiences, metrics))
+
+targetCampaign <- targetCampaign %>% 
+  mutate(check = paste(audiences, metrics)) %>%
+  left_join(select(check_monday, check), by = 'check', keep = T) %>%
+  filter(is.na(check.y)) %>%
+  select(-c(check.x, check.y))
+
+
+tables <- tables %>%
+  str_replace("targetcampaign", "")
+
 con <- dbConnect(
   RMariaDB::MariaDB(),
   dbname = 'rmi_influence_campaign',
@@ -604,13 +654,12 @@ for (i in tables){
 }
 
 
-dbDisconnect(con)
+
 
 #########################################################3
 
 geographyTraffic <- geographyTraffic %>%
   rename(regionPageViews = c("Region Page Views"))
-
 
 
 
@@ -625,8 +674,11 @@ SFcampaigns$campaignID = campaignID
 donations$campaignID = campaignID
 campaignPosts$campaignID = campaignID
 
-targetCampaign$campaignID = targetCampaign$CAMPAIGN_ID
-targetCampaign <- select(targetCampaign, -c(CAMPAIGN_ID, name))
+if (nrow(targetCampaign) > 0){
+
+  targetCampaign$campaignID = targetCampaign$CAMPAIGN_ID
+  targetCampaign <- select(targetCampaign, -c(CAMPAIGN_ID, name))
+  } else { }
 
 contentSummary$campaignID = campaignID
 
@@ -648,8 +700,10 @@ dfs <- list("allTraffic" = allTraffic, "socialTraffic" = socialTraffic, "geograp
             "SFcampaigns"= SFcampaigns,"donations"= donations, "campaignPosts" = campaignPosts, 
             "targetCampaign"= targetCampaign, "contentSummary"= contentSummary)
 
+if (nrow(targetCampaign) > 0){
+  dbWriteTable(con, name = 'targetCampaign', value = targetCampaign, append = T)
+  } else {print('No targetCampaign data to import')}
 
-dbWriteTable(con, name = 'targetCampaign', value = targetCampaign, append = T)
 dbWriteTable(con, name = 'allTraffic', value = allTraffic, append = T)
 dbWriteTable(con, name = 'socialTraffic', value = socialTraffic, append = T)
 dbWriteTable(con, name = 'geographyTraffic', value = geographyTraffic, append = T)
@@ -668,10 +722,10 @@ dbDisconnect(con)
 
 
 
-for(i in dfs){
-
-  dbWriteTable(con, i, i, append = T)
-}
+# for(i in dfs){
+# 
+#   dbWriteTable(con, i, i, append = T)
+# }
 
 write_xlsx(dfs, path = ss)
 

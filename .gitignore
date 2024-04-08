@@ -6,3 +6,5 @@
 R/social_media/sproutsocial_private.R
 R/social_media/dataset.xlsx
 *.env
+R/powerBI/allMCStats.csv
+R/powerBI/allSparkStats.csv

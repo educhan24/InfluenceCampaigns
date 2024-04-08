@@ -1097,13 +1097,24 @@ cleanPostDF <- function(df, type, linkedin = 'FALSE'){
 #' if requesting tagged posts, call only works if earliest date >= April 2023
 getPosts <- function(ids, type){
   
-  AP <- data.frame(created_time = '', post_type = '', text = '', perma_link = '', 
-                   lifetime.impressions = '', lifetime.post_content_clicks = '', 
-                   lifetime.engagements = '', lifetime.shares_count = '')[0, ]
+  # AP <- data.frame(created_time = '', post_type = '', text = '', perma_link = '', 
+  #                  lifetime.impressions = '', lifetime.post_content_clicks = '', 
+  #                  lifetime.engagements = '', lifetime.shares_count = '')[0, ]
   
-  APT <- data.frame(created_time = '', post_type = '', text = '', perma_link = '', 
-                    lifetime.impressions = '', lifetime.post_content_clicks = '', 
-                    lifetime.engagements = '', lifetime.shares_count = '', id = '')[0, ]
+  AP <- data.frame(created_time = character(), post_type = character(),
+                   text = character(), perma_link = character(),
+                   lifetime.impressions = numeric(),lifetime.post_content_clicks = numeric(),
+                   lifetime.engagements = numeric(), lifetime.shares_count = numeric())
+  
+  # APT <- data.frame(created_time = '', post_type = '', text = '', perma_link = '', 
+  #                   lifetime.impressions = '', lifetime.post_content_clicks = '', 
+  #                   lifetime.engagements = '', lifetime.shares_count = '', id = '')[0, ]
+  
+  APT <- data.frame(created_time = character(), post_type = character(),
+                    text = character(), perma_link = character(),
+                    lifetime.impressions = numeric(),lifetime.post_content_clicks = numeric(),
+                    lifetime.engagements = numeric(), lifetime.shares_count = numeric(),
+                    id = integer())
   
   for(i in 1:100){
     if(type == 'tagged'){
@@ -1113,14 +1124,14 @@ getPosts <- function(ids, type){
                                      tagged = TRUE) 
       if(is.null(postStats)){ break }
       postStats <- postStats %>% unnest(tags)
-      APT <- APT %>% rbind(postStats)
+      APT <- APT %>% bind_rows(postStats) # Changed from rbind to bind_rows on 1/31/24 for efficiency
     } else if (type == 'all'){
       postStats <- sproutPostRequest(i, 
-                                     dateRange = paste0("created_time.in(", oneYearAgo, "T00:00:00..", currentDate, "T23:59:59)"), 
+                                     dateRange = paste0("created_time.in(", sixMonthsAgo, "T00:00:00..", currentDate, "T23:59:59)"), 
                                      profileIDs = ids, 
                                      tagged = FALSE) 
       if(is.null(postStats)){ break }
-      AP <- AP %>% rbind(postStats)
+      AP <- AP %>% bind_rows(postStats) # Changed from rbind to bind_rows on 1/31 for efficiency
     }
   }
   
@@ -1131,6 +1142,45 @@ getPosts <- function(ids, type){
 #' get all posts from LinkedIn program accounts 
 #' pass account name as an argument to the linkedin paramater
 #' bind all
+#' 
+
+
+# 
+# APT <- data.frame(created_time = character(), post_type = character(),
+#                     text = character(), perma_link = character(),
+#                     lifetime.impressions = numeric(),lifetime.post_content_clicks = numeric(),
+#                     lifetime.engagements = numeric(), lifetime.shares_count = numeric(),
+#                     id = integer())
+# 
+# 
+# for(i in 1:100){
+#   if(type == 'tagged'){
+#     postStats <- sproutPostRequest(i, 
+#                                    paste0("created_time.in(2023-04-01T00:00:00..", currentDate, "T23:59:59)"), 
+#                                    profileIDs = '(5541628)', 
+#                                    tagged = TRUE) 
+#     if(is.null(postStats)){ break }
+#     postStats <- postStats %>% unnest(tags)
+#     APT <- APT %>% bind_rows(postStats) }
+#    else {}
+# }
+# 
+# type <- 'tagged'
+# 
+# names(LI_CCAF)
+# 
+# i <- 5
+# postStats <- sproutPostRequest(i, 
+#                                paste0("created_time.in(2023-04-01T00:00:00..", currentDate, "T23:59:59)"), 
+#                                profileIDs = '(5541628)', 
+#                                tagged = TRUE) 
+# 
+# postStats <- postStats %>% unnest(tags)
+# 
+# 
+# str(LI_CCAF)
+
+
 getLIProgramPosts <- function(type){
   LI_CFAN <- cleanPostDF(getPosts('(5381251)', type = type), type = type, linkedin = 'CFAN')
   LI_CCAF <- cleanPostDF(getPosts('(5403265)', type = type), type = type, linkedin = 'CCAF')
@@ -1151,7 +1201,7 @@ getPostAverages <- function(){
   #' get all posts from social channels made over the past year
   for(i in 1:300){
     postStats <- sproutPostRequest(i, 
-                                   dateRange = paste0("created_time.in(", oneYearAgo, "T00:00:00..", currentDate, "T23:59:59)"),
+                                   dateRange = paste0("created_time.in(", sixMonthsAgo, "T00:00:00..", currentDate, "T23:59:59)"),
                                    profileIDs = '(3244287, 2528134, 2528107, 2528104, 3354378, 4145669, 4400432, 4613890, 5083459, 5097954, 5098045, 5251820, 5334423, 5403312, 3246632, 5403593, 5403597)',
                                    tagged = FALSE)
     if(is.null(postStats)){ break }

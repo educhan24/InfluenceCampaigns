@@ -210,7 +210,9 @@ getLinkClicks <- function(newsletter) {
 
   for(i in 1:nrow(newsletter)){
   
-    if(deparse(substitute(newsletter)) == 'sparkNLs'){
+      if(deparse(substitute(newsletter)) == 'sparkNLs'){
+    #if(deparse(substitute(newsletter)) == 'testSpark'){
+      
       NL <- sparkClicks(i, newsletter) %>% 
         mutate(story = '') %>% 
         filter(grepl("https://rmi.org", url)) %>% 
@@ -286,8 +288,20 @@ getLinkClicks <- function(newsletter) {
 }
 
 
+# testSpark <- sparkNLs %>%
+#  # filter(name != 'NL 2024-03-17 Upcoming Events') %>%
+#   filter(date > '2024-03-15' & date < '2024-03-20')
+# 
+# testSpark2 <- getLinkClicks(newsletter = testSpark) %>%
+#   filter(!is.na(email))
+# 
+# sparkNLs <- sparkNLs %>%
+#   filter(date != '2024-03-20')
+
 allSpark <- getLinkClicks(newsletter = sparkNLs) %>%
   filter(!is.na(email))
+
+
 allMC <- getLinkClicks(newsletter = marketCatalystNLs) 
 
 
