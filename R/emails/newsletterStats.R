@@ -295,8 +295,8 @@ getLinkClicks <- function(newsletter) {
 # testSpark2 <- getLinkClicks(newsletter = testSpark) %>%
 #   filter(!is.na(email))
 # 
-# sparkNLs <- sparkNLs %>%
-#   filter(date != '2024-03-20')
+sparkNLs <- sparkNLs %>%
+   filter(date != '2024-03-20')
 
 allSpark <- getLinkClicks(newsletter = sparkNLs) %>%
   filter(!is.na(email))
@@ -480,14 +480,7 @@ allMC <- getLinkClicks(newsletter = marketCatalystNLs)
   }
   
   allSparkStats <- getSparkStats()
-  
-  # push data
-  # range_flood(ss = 'https://docs.google.com/spreadsheets/d/1HoSpSuXpGN9tiKsggHayJdnmwQXTbzdrBcs_sVbAgfg/edit#gid=533592380', sheet = 'All Spark Stats', range = "A2:AM100", reformat = FALSE)
-  # write_sheet(allSparkStats, ss = 'https://docs.google.com/spreadsheets/d/1HoSpSuXpGN9tiKsggHayJdnmwQXTbzdrBcs_sVbAgfg/edit#gid=533592380', sheet = 'All Spark Stats')
-  # Sys.sleep(10)
-  # range_flood(ss = 'https://docs.google.com/spreadsheets/d/1HoSpSuXpGN9tiKsggHayJdnmwQXTbzdrBcs_sVbAgfg/edit#gid=533592380', sheet = 'All Spark Stats (Unformatted)', range = "A2:AM100")
-  # write_sheet(allSparkStats, ss = 'https://docs.google.com/spreadsheets/d/1HoSpSuXpGN9tiKsggHayJdnmwQXTbzdrBcs_sVbAgfg/edit#gid=533592380', sheet = 'All Spark Stats (Unformatted)')
-  
+
   write.csv(allSparkStats, 'allSparkStats.csv')
   
   ###
