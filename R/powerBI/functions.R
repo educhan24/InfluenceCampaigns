@@ -37,6 +37,243 @@
 
 #### GOOGLE ANALYTICS ####
 
+
+# NEW: Build function that uses campaign tag in webpage metadata to identify related URLs
+
+# function that scrapes to get campaign
+
+# Function to scrape CAMPAIGN TAG from a URL
+scrape_campaigntag <- function(url) {
+  if (!grepl("^http", url)) {
+    url <- paste0("https://rmi.org", url)
+  }
+  
+  tryCatch({
+  page <- read_html(url) 
+  
+  #extract metadata text from this specific script tag
+  json_scripts <- page %>%
+    html_nodes('script[type="application/ld+json"]') %>%
+    html_text() 
+  
+  #initialize campaign tag var  
+  campaign_tags <- c("cop28", "2023-2025_coalvgas", "oci+") # add to or change
+  campaign_tag <- NULL #initializing
+
+  #loops through each element, parsing json string
+  for (i in json_scripts) {
+    json_content <- fromJSON(i)
+    
+    print("Extracted JSON content:") #testing
+    print(json_content)
+
+    # checks if has keyword field and is of type character; lowercase to avoid case sensitivity 
+    if ("keywords" %in% names(json_content) && is.character(json_content$keywords)) {
+      lowercase_keywords <- tolower(json_content$keywords)
+      
+      # if tag is found, assign it to campaign tag variable and return value
+      for (tag in campaign_tags) {
+        if (tag %in% lowercase_keywords){
+          campaign_tag <- tag
+          print(paste("Campaign tag found:", campaign_tag)) #testing
+          break
+        }
+      }
+    }
+    if(!is.null(campaign_tag)) 
+      break
+  }
+  return(campaign_tag)
+  }, error = function(e) {
+    message(paste("Error in scraping URL:", url, e))
+    return(NULL)
+  })
+}
+
+url1 <- "https://rmi.org/insight/kyog/" 
+url2 <- "https://rmi.org/theres-no-one-size-fits-all-for-achieving-universal-energy-access-in-africa/"
+url3 <- "https://rmi.org/rmi-at-cop28/"
+url4 <- "https://rmi.org/reality-check-natural-gas-true-climate-risk/"
+campaign_tag <- scrape_campaigntag(url4)
+print(campaign_tag)
+
+test_url <- "https://rmi.org/people/nicole-leonard/" # A URL path from GA4
+
+# Call the scraping function and print the result
+campaign_tag <- scrape_campaigntag(test_url)
+print(paste("Campaign tag found:", campaign_tag)) # testing to see whether this url will work
+
+# NEW: Function that gets all urls, scrapes each url, and then adds to dataframe
+# need to add campaign filter
+
+getWebsiteURLs <- function(propertyID, campaign_tags) {
+  all_data <- ga_data(
+    propertyID,
+    date_range = dateRangeGA,
+    dimensions = c("pagePath"),
+    metrics = c('screenPageViews', "totalUsers", "userEngagementDuration"),
+    limit = -1
+  )
+
+  #convert to a dataframe
+  url_data <- as.data.frame(all_data)
+  
+  # Print to verify url  format
+  #print("Retrieved URLs:")
+  #print(url_data$pagePath)
+  
+  
+ # initialize new df for filtered urls
+  filtered_urls <- data.frame(pagePath = character(), campaign_tag = character(), stringsAsFactors = FALSE)
+  
+  base_domain <- "https://rmi.org" 
+  
+  for (url in url_data$pagePath) {
+    full_url <- paste0(base_domain, url)
+    #print(paste("Processing URL:",full_url))  # Print each URL being processed
+    campaign_tag <- scrape_campaigntag(full_url)
+    
+    if (!is.null(campaign_tag) && campaign_tag %in% campaign_tags){
+      filtered_urls <- rbind(filtered_urls, data.frame(pagePath = full_url, campaign_tag = campaign_tag, stringsAsFactors = FALSE))
+  
+    }
+  }
+  
+  return(filtered_urls)
+}
+
+#url_data <- as.data.frame(all_data)
+#print(url_data$pagePath)
+
+
+# Print the URLs
+#print(url_data$pagePath)
+
+#getWebsiteURLs(propertyID = rmiPropertyID, campaign_tags = campaign_tags)
+rmiPropertyID <- 354053620
+campaign_tags <- c("cop28", "2023-2025_coalvgas", "oci+")
+
+# Call the function with the correct arguments
+filtered_urls <- getWebsiteURLs(propertyID = rmiPropertyID, campaign_tags = campaign_tags)
+view(filtered_urls)
+
+#return(filtered_urls)
+
+# NEW: Function that scrapes the given urls for titles.
+scrape_pagetitle <- function(url) {
+    webpage <- read_html(url) 
+    page_title <- webpage %>%
+      html_nodes("title") %>%
+      html_text() %>%
+      trimws()
+    
+    cleaned_title <- sub(" - RMI$", "", page_title)
+    
+    return(cleaned_title)
+}
+
+url3 <- "https://rmi.org/event/later-is-too-late/"
+cleaned_title <- scrape_pagetitle(url3)
+print(cleaned_title)
+
+# NEW: Function that scrapes the given urls for content type.
+scrape_pagetype <- function(url) {
+  path <- gsub("https://rmi.org/", "", url)
+  
+  if (grepl("^insight", path)) {
+    return("Report")
+  } else if (grepl("^event", path)){
+    return("Event")
+  } else if (grepl("^press-release", path)) {
+    return("News Release")
+  } else if (grepl("rmi-at", path)){
+    return("Hub") #maybe hardcode in the future? not sure if this logic will apply to all hubs
+  } else {
+    return("Article")
+  }
+}
+
+example1 <- "https://rmi.org/event/sustainable-aluminum-finance-framework-launch-at-cop28/"
+example2 <- "https://rmi.org/insight/the-rural-equitable-climate-transition-toward-carbon-neutrality-and-shared-prosperity/"
+example3 <- "https://rmi.org/organic-waste-an-untapped-solution-waste-authorities-in-nigeria-tackle-food-waste-as-a-climate-solution-in-lagos/"
+example4 <- "https://rmi.org/press-release/caribbean-countries-on-the-frontline-of-climate-change-get-lasting-support-to-unlock-critical-finance/"
+example5 <- "https://rmi.org/rmi-at-cop28/"
+
+print(scrape_pagetype(example1))
+print(scrape_pagetype(example2))
+print(scrape_pagetype(example3))
+print(scrape_pagetype(example4))
+print(scrape_pagetype(example5))
+
+#this code should be added to dashboard eventually; not sure if it will keep updating, but it should? 
+#sapply makes it a vector
+campaign_urls <- filtered_urls %>%
+  mutate(pageTitle = sapply(pagePath, scrape_pagetitle)) %>%
+  mutate(pageType = sapply(pagePath, scrape_pagetype)) %>%
+  select(pageTitle, pageType, pagePath, campaign_tag) %>%
+  mutate(propertyID = 354053620) #can create if-else for coal vs gas
+  #mutate(reportID) %>%
+  #mutate(eventID)
+
+
+view(campaign_urls)
+
+# NEW: Function that populates new dataframe to replicate previous "campaignkey" xls
+#str(filtered_urls)  # might not need this.
+
+# new_campaignkey_df <- function(filtered_urls) {
+#   campaignkey_df <- data.frame(
+#     title = character(),
+#     type = character(),
+#     page = character(),
+# #    reportid = numeric(),
+#  #   eventid = numeric(),
+#     stringAsFactors = FALSE
+#   )
+# 
+#   for (i in 1:nrow(filtered_urls)) {
+#     url <- filtered_urls$pagePath[i]
+#     campaign_tag <- filtered_urls$campaign_tag[i]
+#     print(paste("Processing URL:", url))  # Debugging 
+#     
+#     scraped_info <- scrape_campaigntag(url)
+#     print("Scraped info:")
+#     print(scraped_info)
+#     
+#     if (!is.null(scraped_info) && all(c('headline', '@type', 'url') %in% names(scraped_info))) {
+#       title <- scraped_info$headline
+#       type <- scraped_info$`@type`
+#       page <- scraped_info$url
+#     } else {
+#       # If scraping failed or fields are missing, populate with NA
+#       title <- NA
+#       type <- NA
+#       page <- NA
+#       print(paste("No valid scraped info for URL:", url)) 
+#     }
+#       
+#     campaignkey_df <- rbind(campaignkey_df, data.frame(
+#         title = title,
+#         type = type,
+#         page = page,
+#  #       reportid = NA,
+#   #      eventid = NA,
+#         stringAsFactors = False
+#       ))
+#     
+#     print(paste("Iteration", i, ": Current dataframe state:"))
+#     print(campaignkey_df)
+#   }
+#   return(campaignkey_df)
+#   
+# }
+# 
+# result_df <- new_campaignkey_df(filtered_urls)
+# print(campaignkey_df)
+# head(campaignkey_df)
+
+# end.
+
 #' get page title and content type by web scraping page URLs
 getPageData <- function(df){
   
@@ -59,7 +296,7 @@ getPageData <- function(df){
       df[i, 'pageTitle'] <- NA
     })
     
-    #' get contet type from page metadata
+    #' get content type from page metadata
     if(df[i, 'site'] == 'rmi.org'){
       tryCatch( { 
         url_tb <- url %>%
@@ -97,15 +334,15 @@ getPageData <- function(df){
     #                                        pageType)),
       mutate(pageType = case_when(grepl('article', tolower(metadata)) ~ 'Article',
                                   grepl('report', tolower(metadata)) ~ 'Report',
-                                  grepl('news', tolower(metadata)) ~ 'News Release',
+                                  grepl('news|press-release', tolower(pageURL)) ~ 'News Release',  # Updated to catch all
                                   grepl('event', tolower(pageURL)) ~ 'Event',
-                                  grepl('hub', tolower(pageURL)) ~ 'Hub',
+                                  grepl('hub|rmi', tolower(pageURL)) ~ 'Hub',
                                   TRUE ~ pageType),
             icon = case_when(grepl('article', tolower(metadata)) ~ 4,
                              grepl('report', tolower(metadata)) ~ 1,
-                             grepl('news', tolower(metadata)) ~ 2,
+                             grepl('news|press-release', tolower(pageURL)) ~ 2,  
                              grepl('event', tolower(pageURL)) ~ 3,
-                             grepl('hub', tolower(pageURL)) ~ 6,
+                             grepl('hub|rmi', tolower(pageURL)) ~ 6,
                              TRUE ~ 5)) %>%
               
               # ifelse(grepl('article', tolower(metadata)), 4,
@@ -113,6 +350,85 @@ getPageData <- function(df){
     distinct(pageTitle, .keep_all = TRUE)
   
 }
+
+#AMENDING THIS FUNCTION TO INCLUDE CAMPAIGN TAG
+
+getPageData <- function(df){
+  
+  for(i in 1:nrow(df)){
+    
+    url <- as.character(df[i, 'pageURL'])
+    
+    #' get page titles
+    tryCatch( { 
+      url_tb <- url %>%
+        read_html() %>% 
+        html_nodes('head > title') %>% 
+        html_text() %>% 
+        as.data.frame() %>% 
+        rename(title = 1) 
+      
+      df[i, 'pageTitle'] <- url_tb[1, 'title']
+      
+    }, error = function(e){
+      df[i, 'pageTitle'] <- NA
+    })
+    
+    #' get content type from page metadata
+    if(df[i, 'site'] == 'rmi.org'){
+      tryCatch( { 
+        url_tb <- url %>%
+          read_html() %>% 
+          html_nodes('script') %>% 
+          html_text() %>% 
+          as.data.frame() %>%
+          rename(node = 1) %>% 
+          filter(grepl('schema.org', node)) %>% 
+          mutate(program = str_extract(node, 'articleSection\\":\\"([^"]+)\\"'),
+                 program = gsub('articleSection":"',"",program),
+                 program = gsub('"', "", program)) %>%
+          mutate(keywords = sub('.*keywords\\"\\:\\[', "", node),
+                 keywords = gsub('\\].*', "", keywords))
+        
+        df[i, 'metadata'] <- url_tb[2, 'keywords']
+        df[i, 'program'] <- url_tb[2, 'program']
+        
+      }, error = function(e){
+        df[i, 'metadata'] <- NA
+      })
+    } else {
+      #' categorize as 'New Website' if no metadata is detected
+      df[i, 'metadata'] <- NA
+      df[i, 'pageType'] <- 'New Website'
+    }
+    
+  }
+  
+  #' categorize as 'Article' or 'Report' if these terms are detected in the metadata
+  df <- df %>% 
+    # mutate(pageType = ifelse(grepl('article', tolower(metadata)), 'Article',
+    #                          ifelse(grepl('report', tolower(metadata)), 'Report',
+    #                                 ifelse(grepl('news release', tolower(metadata)), 'News Release',
+    #                                        pageType)),
+    mutate(pageType = case_when(grepl('article', tolower(metadata)) ~ 'Article',
+                                grepl('report', tolower(metadata)) ~ 'Report',
+                                grepl('news', tolower(metadata)) ~ 'News Release',
+                                grepl('event', tolower(pageURL)) ~ 'Event',
+                                grepl('hub', tolower(pageURL)) ~ 'Hub',
+                                TRUE ~ pageType),
+           icon = case_when(grepl('article', tolower(metadata)) ~ 4,
+                            grepl('report', tolower(metadata)) ~ 1,
+                            grepl('news', tolower(metadata)) ~ 2,
+                            grepl('event', tolower(pageURL)) ~ 3,
+                            grepl('hub', tolower(pageURL)) ~ 6,
+                            TRUE ~ 5)) %>%
+    
+    # ifelse(grepl('article', tolower(metadata)), 4,
+    #            ifelse(grepl('report', tolower(metadata)), 1, 5))) %>% 
+    distinct(pageTitle, .keep_all = TRUE)
+  
+}
+# End of new function.
 
 #' get web traffic metrics for all pages
 getPageMetrics <- function(propertyID, pages){
@@ -1083,7 +1399,7 @@ cleanPostDF <- function(df, type, linkedin = 'FALSE'){
     posts <- posts %>% 
       select(created_time, account, post_type, icon, impressions = lifetime.impressions, 
              engagements = lifetime.engagements, engagementRate, postClicks = lifetime.post_content_clicks,
-             shares = lifetime.shares_count, perma_link, text) 
+             shares = lifetime.shares_count, perma_link, text)
   } 
   
   posts <- posts %>% 

@@ -1,14 +1,18 @@
 library(tidyverse)
-library(googlesheets4)
 library(rvest)
 library(httr)
 library(rjson)
 library(jsonlite)
 library(dotenv)
+library(dplyr)
+library(stringr)
+library(curl)
 
 
-setwd('C:\\Users\\ghoffman\\OneDrive - RMI\\01. Projects\\Python_General\\RMI_Analytics\\R\\powerBI')
 
+#setwd('C:\\Users\\elizabeth.duchan\\Document\\GitHub\\InfluenceCampaigns\\R\\powerBI')
+
+setwd("~/GitHub/InfluenceCampaigns/R/powerBI")
 
 load_dot_env('Renviron.env')
 
@@ -24,7 +28,8 @@ header5 <- c("Authorization" = pardotTokenV5, "Pardot-Business-Unit-Id" = pardot
 
 ## get call
 get <- function(url, header) {
-  request <- GET(url, add_headers(.headers = header))
+  #GET(url, timeout(30))
+  request <- GET(url, add_headers(.headers = header), timeout(200))
   response <- jsonlite::fromJSON(content(request, as = "text", encoding = "UTF-8"))
 }
 
@@ -38,6 +43,7 @@ get <- function(url, header) {
 # }
 
 get_title <- function(url) {
+  #GET(url, timeout(30))
   if (is.na(url)) {
     return(NA_character_)
   } else {
@@ -68,39 +74,44 @@ get_title <- function(url) {
 
 
 getTotalClicks <- function (df) {
+  #GET(url, timeout(30))
   for(i in 1:nrow(df)){
     email_clicks <- GET(paste0("https://pi.pardot.com/api/emailClick/version/4/do/query?format=json&list_email_id=", df[i, 'id']),
-                        add_headers(.headers = header4))
+                        add_headers(.headers = header4), timeout(200))
     getClicks <- jsonlite::fromJSON(content(email_clicks, as = "text", encoding = "UTF-8"))
     
     df[i, 'totalClicks'] <- getClicks[["result"]][["total_results"]]
   }
   return(df)
+  #GET(url, timeout(30))
 }
 
 ## get all newsletters since Jan 1, 2023
 allNLs <- data.frame(id = '', name = '', subject = '', sentAt = '', createdAt = '')[0,]
 
 for(i in 1:30){
+  #GET(url, timeout(30))
   if(i == 1){
     # write query using next page token to bypass API call limit
     emailLists <- GET('https://pi.pardot.com/api/v5/objects/list-emails?fields=id,name,subject,campaignId,isPaused,isSent,isDeleted,clientType,createdById,updatedById,createdAt,updatedAt,sentAt,operationalEmail,trackerDomainId,emailTemplateId&sentAtAfterOrEqualTo=2023-01-01T15:50:00-04:00',
-                      add_headers(.headers = header5))
+                      add_headers(.headers = header5), timeout(200))
     res <- jsonlite::fromJSON(content(emailLists, as = "text", encoding = "UTF-8"))
-    email_lists <- res[[3]] %>% select(id, name, subject, sentAt, createdAt)
+    email_lists <- res[[3]] %>% dplyr::select(id, name, subject, sentAt, createdAt)
     nextDate <- email_lists[200, 'createdAt']
     allNLs <- allNLs %>% rbind(email_lists)
     
   } else {
+    #GET(url, timeout(30))
     emailLists <- GET(paste0('https://pi.pardot.com/api/v5/objects/list-emails?fields=id,name,subject,campaignId,isPaused,isSent,isDeleted,clientType,createdById,updatedById,createdAt,updatedAt,sentAt,operationalEmail,trackerDomainId,emailTemplateId&sentAtAfter=', nextDate),
-                      add_headers(.headers = header5))
+                      add_headers(.headers = header5), timeout(200))
     res <- jsonlite::fromJSON(content(emailLists, as = "text", encoding = "UTF-8"))
-    email_lists <- res[[3]] %>% select(id, name, subject, sentAt, createdAt) 
+    email_lists <- res[[3]] %>% dplyr::select(id, name, subject, sentAt, createdAt) 
     nextDate <- email_lists[200, 'createdAt']
     
     allNLs <- allNLs %>% rbind(email_lists)
     if (nrow(email_lists) < 200) break
   }
+  #GET(url, timeout(30))
 }
 
 # filter through list to find correct emails
@@ -135,7 +146,7 @@ getBatchClicks <- function(emailId, df){
     if(i == 1){
       # write query using next page token to bypass API call limit
       email_clicks <- GET(paste0("https://pi.pardot.com/api/emailClick/version/4/do/query?format=json&list_email_id=", df[emailId, 'id']),
-                          add_headers(.headers = header4))
+                          add_headers(.headers = header4), timeout(200))
       getClicks <- jsonlite::fromJSON(content(email_clicks, as = "text", encoding = "UTF-8"))
       clicksQuery <- getClicks[["result"]][["emailClick"]]
       
@@ -145,8 +156,9 @@ getBatchClicks <- function(emailId, df){
       
       allClicks <- allClicks %>% rbind(clicksQuery)
     } else {
+      #GET(url, timeout(30))
       email_clicks <- GET(paste0("https://pi.pardot.com/api/emailClick/version/4/do/query?format=json&created_after=", nextDate, "&list_email_id=", df[emailId, 'id']),
-                          add_headers(.headers = header5))
+                          add_headers(.headers = header5), timeout(200))
       getClicks <- jsonlite::fromJSON(content(email_clicks, as = "text", encoding = "UTF-8"))
       clicksQuery <- as.data.frame(getClicks[["result"]][["emailClick"]])
       
@@ -256,6 +268,7 @@ getLinkClicks <- function(newsletter) {
         bind_rows(top_wider)
       
     } else if(deparse(substitute(newsletter)) == 'marketCatalystNLs'){
+      #GET(url, timeout(30))
       NL <- sparkClicks(i, newsletter) %>% 
         mutate(story = '') %>%  
         filter(grepl("https://rmi.org", url)) %>% 
@@ -283,7 +296,7 @@ getLinkClicks <- function(newsletter) {
         mutate_all(as.character) %>%
         bind_rows(top_wider)
     }
-  }
+  } 
   return(allCleaned)
 }
 
@@ -320,7 +333,7 @@ allMC <- getLinkClicks(newsletter = marketCatalystNLs)
   
   # Pretty sure this was just testing, not needed. Removed 12/15/2023
   emailStats <- GET(paste0('https://pi.pardot.com/api/email/version/4/do/stats/id/1397547468?format=json'),
-                    add_headers(.headers = header4))
+                    add_headers(.headers = header4), timeout(200))
   getStats <- fromJSON(content(emailStats, as = "text", encoding = "UTF-8"))
   stats <- as.data.frame(getStats[["stats"]])
   
@@ -347,6 +360,7 @@ allMC <- getLinkClicks(newsletter = marketCatalystNLs)
       mutate(name = ifelse(name == 'NL Spark 2023-04-20', 'NL 2023-04-20 Spark', name))
     
     return(allEmailStats)
+    #GET(url, timeout(30))
   }
   
   allSparkEmailStats <- getEmailStats(sparkNLs)
@@ -477,6 +491,7 @@ allMC <- getLinkClicks(newsletter = marketCatalystNLs)
              clicks_events, COR_events) 
     
     return(allEmailStats4)
+    #GET(url, timeout(30))
   }
   
   allSparkStats <- getSparkStats()
@@ -549,6 +564,7 @@ allMC <- getLinkClicks(newsletter = marketCatalystNLs)
              url, title, clicks, COR) 
     
     return(allEmailStats3)
+   # GET(url, timeout(30))
   }
   
   allMCStats <- getMCStats()
